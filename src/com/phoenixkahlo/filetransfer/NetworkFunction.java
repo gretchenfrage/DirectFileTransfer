@@ -31,7 +31,7 @@ public enum NetworkFunction {
 	 * <p>
 	 * Invoke <code>receiveAppendToFile(path, data</code> in the sender.
 	 * </p>
-	 * <code>params = (String[] path, CompoundedByteArray data)</code>
+	 * <code>params = (String[] path, byte[] data)</code>
 	 */
 	APPEND_TO_FILE,
 	

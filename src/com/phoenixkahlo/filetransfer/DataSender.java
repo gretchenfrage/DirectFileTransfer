@@ -6,13 +6,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Scanner;
 import java.util.stream.Collectors;
 
 import com.phoenixkahlo.networking.CallBroadcaster;
 import com.phoenixkahlo.networking.Encoder;
-import com.phoenixkahlo.utils.CompoundedByteArray;
 
 public class DataSender extends Thread {
 
@@ -82,7 +82,7 @@ public class DataSender extends Thread {
 	/**
 	 * Broadcast method.
 	 */
-	private void broadcastAppendToFile(String[] path, CompoundedByteArray data) throws IOException {
+	private void broadcastAppendToFile(String[] path, byte[] data) throws IOException {
 		broadcaster.broadcast(NetworkFunction.APPEND_TO_FILE, path, data);
 	}
 
@@ -146,11 +146,11 @@ public class DataSender extends Thread {
 	public void receiveSetupFilesAndFolders(List<String[]> files, List<String[]> folders) {
 		if (receiving) {
 			try {
-				for (String[] path : files) {
-					receivingSystem.makeFile(path);
-				}
 				for (String[] path : folders) {
 					receivingSystem.makeFolder(path);
+				}
+				for (String[] path : files) {
+					receivingSystem.makeFile(path);
 				}
 			} catch (IOException e) {
 				e.printStackTrace(); // TODO: handle this better
@@ -164,11 +164,10 @@ public class DataSender extends Thread {
 	 * Called by the receive thread. If receiving, append the bytes to the file
 	 * in the receiving system.
 	 */
-	public void receiveAppendToFile(String[] path, CompoundedByteArray data) {
+	public void receiveAppendToFile(String[] path, byte[] data) {
 		if (receiving) {
 			try (OutputStream out = new FileOutputStream(receivingSystem.getFile(path))) {
-				// TODO: cache the output stream.
-				out.write(data.toArray());
+				out.write(data);
 			} catch (IOException e) {
 				e.printStackTrace(); // TODO: handle this better
 			}
@@ -224,7 +223,7 @@ public class DataSender extends Thread {
 				String path = InputUtils.promptFolderPath(scanner);
 				System.out.println("give message (in one line)");
 				System.out.print("> ");
-				String message = scanner.nextLine();
+				String message = InputUtils.nextNonEmptyLine(scanner);
 				RequestResponse response = requestTransferAwaitResponse(message);
 				if (response == RequestResponse.REJECT) {
 					System.out.println("other user rejected transfer");
@@ -243,19 +242,19 @@ public class DataSender extends Thread {
 						int read;
 						do {
 							read = in.read(buffer);
-							CompoundedByteArray data = new CompoundedByteArray(buffer, 0, read);
+							byte[] data = Arrays.copyOf(buffer, read);
 							if (read != 0) {
 								broadcastAppendToFile(sendingPath, data);
+								System.out.println("sent " + read + "B of " + sendingPath[sendingPath.length - 1]);
 							}
-						} while (read != 0);
+						} while (in.available() > 0);
 						in.close();
-						System.out.println("sent \"" + sendingPath[sendingPath.length - 1] + "\" (t="
-								+ (int) (System.currentTimeMillis() / 1000) + ") ");
 					}
 					System.out.println("transfer complete.");
 					broadcastFinishTransfer();
 				}
 			} else if (option.equalsIgnoreCase("receive")) {
+				System.out.println("in receive mode...");
 				inReceiveMode = true;
 			}
 		} catch (IOException e) {

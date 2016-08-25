@@ -8,7 +8,6 @@ import com.phoenixkahlo.networking.CallReceiver;
 import com.phoenixkahlo.networking.Decoder;
 import com.phoenixkahlo.networking.InstanceMethod;
 import com.phoenixkahlo.networking.ProtocolViolationException;
-import com.phoenixkahlo.utils.CompoundedByteArray;
 
 public class DataReceiver extends Thread {
 
@@ -25,7 +24,7 @@ public class DataReceiver extends Thread {
 		receiver.bind(NetworkFunction.SETUP_FILES_AND_FOLDERS,
 				new InstanceMethod(this, "setupFilesAndFolders", List.class, List.class));
 		receiver.bind(NetworkFunction.APPEND_TO_FILE,
-				new InstanceMethod(this, "appendToFile", String[].class, CompoundedByteArray.class));
+				new InstanceMethod(this, "appendToFile", String[].class, byte[].class));
 		receiver.bind(NetworkFunction.FINISH_TRANSFER, new InstanceMethod(this, "finishTransfer"));
 	}
 
@@ -61,7 +60,7 @@ public class DataReceiver extends Thread {
 	/**
 	 * Receive method.
 	 */
-	public void appendToFile(String[] path, CompoundedByteArray data) {
+	public void appendToFile(String[] path, byte[] data) {
 		sender.receiveAppendToFile(path, data);
 	}
 	
