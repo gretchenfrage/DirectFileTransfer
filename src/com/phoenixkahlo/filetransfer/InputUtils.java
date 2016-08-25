@@ -30,6 +30,8 @@ public class InputUtils {
 		while (true) {
 			System.out.print("> ");
 			String path = nextNonEmptyLine(scanner);
+			if (path.toCharArray()[0] == '"' && path.toCharArray()[path.length() - 1] == '"')
+				path = path.substring(1, path.length() - 1);
 			if (condition.test(new File(path)))
 				return path;
 			else
