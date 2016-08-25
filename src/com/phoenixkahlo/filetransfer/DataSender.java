@@ -109,7 +109,7 @@ public class DataSender extends Thread {
 			System.out.println("accept/reject");
 			String choice = InputUtils.getOption(scanner, "accept", "reject");
 			if (choice.equalsIgnoreCase("accept")) {
-				System.out.println("what folder to save to");
+				System.out.println("enter target folder path (one line)");
 				String path = InputUtils.promptFolderPath(scanner);
 				receivingSystem = new FileSystem(path);
 				receiving = true;
@@ -166,6 +166,7 @@ public class DataSender extends Thread {
 	 */
 	public void receiveAppendToFile(String[] path, byte[] data) {
 		if (receiving) {
+			System.out.println("received " + data.length + "B of " + path[path.length - 1]);
 			try (OutputStream out = new FileOutputStream(receivingSystem.getFile(path))) {
 				out.write(data);
 			} catch (IOException e) {
@@ -182,6 +183,7 @@ public class DataSender extends Thread {
 	 */
 	public void receiveFinishTransfer() {
 		if (receiving) {
+			System.out.println("transfer complete.");
 			receiving = false;
 			receivingSystem = null;
 		} else {
@@ -219,43 +221,47 @@ public class DataSender extends Thread {
 			System.out.println("send/receive");
 			String option = InputUtils.getOption(scanner, "send", "receive");
 			if (option.equalsIgnoreCase("send")) {
-				System.out.println("enter file path (in one line)");
-				String path = InputUtils.promptFolderPath(scanner);
-				System.out.println("give message (in one line)");
-				System.out.print("> ");
-				String message = InputUtils.nextNonEmptyLine(scanner);
-				RequestResponse response = requestTransferAwaitResponse(message);
-				if (response == RequestResponse.REJECT) {
-					System.out.println("other user rejected transfer");
-				} else if (response == RequestResponse.NOT_RECEIVING) {
-					System.out.println("other user not in receive mode");
-				} else if (response == RequestResponse.ACCEPT) {
-					System.out.println("beginning transfer...");
-					// Time to transfer
-					FileSystem sendingSystem = new FileSystem(path);
-					List<String[]> files = sendingSystem.getFilePaths().collect(Collectors.toList());
-					List<String[]> folders = sendingSystem.getFolderPaths().collect(Collectors.toList());
-					setupFilesAndFolders(files, folders);
-					for (String[] sendingPath : files) {
-						InputStream in = new FileInputStream(sendingSystem.getFile(sendingPath));
-						byte[] buffer = new byte[1_000_000]; // 1 MB buffer
-						int read;
-						do {
-							read = in.read(buffer);
-							byte[] data = Arrays.copyOf(buffer, read);
-							if (read != 0) {
-								broadcastAppendToFile(sendingPath, data);
-								System.out.println("sent " + read + "B of " + sendingPath[sendingPath.length - 1]);
-							}
-						} while (in.available() > 0);
-						in.close();
+				while (true) {
+					System.out.println("enter file/folder path (in one line)");
+					String path = InputUtils.promptValidPath(scanner);
+					System.out.println("give message (in one line)");
+					System.out.print("> ");
+					String message = InputUtils.nextNonEmptyLine(scanner);
+					RequestResponse response = requestTransferAwaitResponse(message);
+					if (response == RequestResponse.REJECT) {
+						System.out.println("other user rejected transfer");
+					} else if (response == RequestResponse.NOT_RECEIVING) {
+						System.out.println("other user not in receive mode");
+					} else if (response == RequestResponse.ACCEPT) {
+						System.out.println("beginning transfer...");
+						// Time to transfer
+						FileSystem sendingSystem = new FileSystem(path);
+						List<String[]> files = sendingSystem.getFilePaths().collect(Collectors.toList());
+						List<String[]> folders = sendingSystem.getFolderPaths().collect(Collectors.toList());
+						setupFilesAndFolders(files, folders);
+						for (String[] sendingPath : files) {
+							InputStream in = new FileInputStream(sendingSystem.getFile(sendingPath));
+							byte[] buffer = new byte[5_000_000]; // 1 MB buffer
+							int read;
+							do {
+								read = in.read(buffer);
+								byte[] data = Arrays.copyOf(buffer, read);
+								if (read != 0) {
+									broadcastAppendToFile(sendingPath, data);
+									System.out.println("sent " + read + "B of " + sendingPath[sendingPath.length - 1]);
+								}
+							} while (in.available() > 0);
+							in.close();
+						}
+						System.out.println("transfer complete.");
+						broadcastFinishTransfer();
 					}
-					System.out.println("transfer complete.");
-					broadcastFinishTransfer();
+					System.out.println("send more?");
 				}
 			} else if (option.equalsIgnoreCase("receive")) {
 				System.out.println("in receive mode...");
 				inReceiveMode = true;
+				// And here, the sending thread will die.
 			}
 		} catch (IOException e) {
 			e.printStackTrace(); // TODO: handle better

@@ -3,6 +3,7 @@ package com.phoenixkahlo.filetransfer;
 import java.io.File;
 import java.util.Arrays;
 import java.util.Scanner;
+import java.util.function.Predicate;
 
 public class InputUtils {
 
@@ -25,15 +26,23 @@ public class InputUtils {
 		}
 	}
 
-	public static String promptFolderPath(Scanner scanner) {
+	public static String promptConditionPath(Scanner scanner, Predicate<File> condition, String failMessage) {
 		while (true) {
 			System.out.print("> ");
 			String path = nextNonEmptyLine(scanner);
-			if (new File(path).isDirectory())
+			if (condition.test(new File(path)))
 				return path;
 			else
-				System.out.println("not a directory: \"" + path + "\"");
+				System.out.println(failMessage + ": \"" + path + "\"");
 		}
+	}
+	
+	public static String promptFolderPath(Scanner scanner) {
+		return promptConditionPath(scanner, File::isDirectory, "not a directory");
+	}
+	
+	public static String promptValidPath(Scanner scanner) {
+		return promptConditionPath(scanner, File::exists, "path not found");
 	}
 
 	public static String nextNonEmptyLine(Scanner scanner) {

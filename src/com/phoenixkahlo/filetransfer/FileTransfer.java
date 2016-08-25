@@ -1,6 +1,5 @@
 package com.phoenixkahlo.filetransfer;
 
-import java.io.IOException;
 import java.net.Socket;
 
 import com.phoenixkahlo.networking.ArrayEncoder;
@@ -13,7 +12,7 @@ import com.phoenixkahlo.networking.UnionEncoder;
  */
 public class FileTransfer {
 	
-	public static void main(String[] args) throws IOException {
+	public static void main(String[] args) {
 		UnionEncoder encoder = new UnionEncoder();
 		
 		encoder.bind(0, new ArrayEncoder(String.class));
@@ -22,9 +21,18 @@ public class FileTransfer {
 		
 		Decoder decoder = encoder.toDecoder();
 		
-		Socket socket = SocketMaker.connectSocket();
-		DataSender sender = new DataSender(socket, encoder);
-		DataReceiver receiver = new DataReceiver(socket, decoder);
+		DataSender sender = null;
+		DataReceiver receiver = null;
+		while (sender == null || receiver == null) {
+			try {
+				Socket socket = SocketMaker.connectSocket();
+				sender = new DataSender(socket, encoder);
+				receiver = new DataReceiver(socket, decoder);
+			} catch (Exception e) {
+				System.out.println();
+				System.out.println(e.getClass().getName() + ": " + e.getMessage());
+			}
+		}
 		sender.injectReceiver(receiver);
 		receiver.injectSender(sender);
 		sender.start();

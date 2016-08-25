@@ -37,6 +37,25 @@ public class ArrayUtils {
 		out[out.length - 1] = obj;
 		return out;
 	}
+	
+	public static <E> E[] prepend(E obj, E[] arr) {
+		@SuppressWarnings("unchecked")
+		E[] out = (E[]) Array.newInstance(arr.getClass().getComponentType(), arr.length + 1);
+		out[0] = obj;
+		for (int i = 0; i < arr.length; i++) {
+			out[i + 1] = arr[i];
+		}
+		return out;
+	}
+	
+	public static <E> E[] snippet(E[] arr, int start, int end) {
+		@SuppressWarnings("unchecked")
+		E[] out = (E[]) Array.newInstance(arr.getClass().getComponentType(), end - start);
+		for (int i = 0; i < end - start; i++) {
+			out[i + start] = arr[i];
+		}
+		return out;
+	}
 
 	/**
 	 * @return a shallow copy of arr.

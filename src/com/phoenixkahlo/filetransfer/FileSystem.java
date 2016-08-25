@@ -12,17 +12,18 @@ import java.util.stream.Stream;
 
 /**
  * Represents a file or collection of files with universal string array paths.
+ * If the root is a folder, that folder will be represented with an empty path.
+ * If the root is a file, it will be represented as if it is the only item in a
+ * folder, which will have an empty path.
  */
 public class FileSystem {
 
-	/*
-	 * The path of the file or folder that will be represented by an empty array
-	 * path.
-	 */
 	private Path root;
-
+	private boolean rootIsFile;
+	
 	public FileSystem(Path root) {
 		this.root = root;
+		rootIsFile = root.toFile().isFile();
 	}
 
 	public FileSystem(File root) {
@@ -51,13 +52,20 @@ public class FileSystem {
 	}
 
 	private String[] fileToArrayPath(File file) {
-		return root.relativize(file.toPath()).toString().split(Pattern.quote(File.separator));
+		if (rootIsFile) {
+			if (file.toPath().equals(root))
+				return new String[] { file.getName() };
+			else
+				throw new IllegalArgumentException("File doesn't exist within structure");
+		} else {
+			return root.relativize(file.toPath()).toString().split(Pattern.quote(File.separator));
+		}
 	}
-
+	
 	private Stream<String[]> filteredPathStream(Predicate<? super File> filter) {
 		return getAllContents().stream().filter(filter).map(this::fileToArrayPath);
 	}
-	
+
 	/**
 	 * @return the array paths of all non-folder files within this system.
 	 */
@@ -73,20 +81,27 @@ public class FileSystem {
 	}
 
 	private String arrToSystemPath(String[] arrPath) {
-		return root.toString() + File.separator + String.join(File.separator, arrPath);
+		if (rootIsFile) {
+			if (arrPath.length == 1 && arrPath[0].equals(root.toFile().getName()))
+				return root.toFile().getPath();
+			else
+				throw new IllegalArgumentException("Path doesn't exist within structure");
+		} else {
+			return root.toString() + File.separator + String.join(File.separator, arrPath);
+		}
 	}
-	
+
 	/**
 	 * @return the file or folder represented by that array path.
 	 */
 	public File getFile(String[] path) {
 		return new File(arrToSystemPath(path));
 	}
-	
+
 	public void makeFile(String[] path) throws IOException {
 		getFile(path).createNewFile();
 	}
-	
+
 	public void makeFolder(String[] path) {
 		getFile(path).mkdirs();
 	}

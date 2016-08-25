@@ -37,11 +37,11 @@ public class SocketMaker {
 	private static final int ACCEPTED = 3;
 	private static final int REJECTED = 4;
 
-	public static Socket connectSocket() throws IOException {
+	public static Socket connectSocket() throws Exception {
 		return connectSocket(new Scanner(System.in));
 	}
 	
-	private static Socket connectSocket(Scanner scanner) throws IOException {
+	private static Socket connectSocket(Scanner scanner) throws Exception {
 		System.out.println("join [ip] [port]/host [port]");
 		String choice = InputUtils.getOption(scanner, "join", "host");
 		Socket connection = null;
@@ -57,7 +57,7 @@ public class SocketMaker {
 	 * connection fails, will recurse to the connectSocket method, beginning the
 	 * prompt again.
 	 */
-	private static Socket join(Scanner scanner) throws IOException {
+	private static Socket join(Scanner scanner) throws Exception {
 		String ip = scanner.next();
 		int port = scanner.nextInt();
 		System.out.print("joining... ");
