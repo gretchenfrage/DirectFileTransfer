@@ -63,7 +63,7 @@ public class SocketMaker {
 	private static void scan(Scanner scanner) {
 		int port = scanner.nextInt();
 		System.out.println("scanning LAN on port " + port + "...");
-		Object printLock = new Object();
+		List<String> toTry = new ArrayList<String>();
 
 		class ScannerThread extends Thread {
 
@@ -75,38 +75,18 @@ public class SocketMaker {
 
 			@Override
 			public void run() {
-				try {
-					Optional<Socket> socket = connectWithinTime(address, port, 1000);
-					if (socket.isPresent()) {
-						OutputStream out = socket.get().getOutputStream();
-						InputStream in = socket.get().getInputStream();
-						out.write(HANDSHAKE_CALL);
-						Optional<byte[]> response = readWithinTime(in, HANDSHAKE_RESPONSE.length, HANDSHAKE_PATIENCE);
-						if (response.isPresent() && Arrays.equals(response.get(), HANDSHAKE_RESPONSE)) {
-							out.write(IS_SCANNING);
-							socket.get().close();
-							synchronized (printLock) {
-								System.out.println(address + " hosting");
-							}
-						} else {
-							synchronized (printLock) {
-								System.out.println(address + " failed handshake");
-							}
-						}
-					} else {
-						synchronized (printLock) {
-							System.out.println(address + " wouldn't connect");
-						}
+				Optional<Socket> socket = connectWithinTime(address, port, 10_000);
+				if (socket.isPresent()) {
+					try {
+						socket.get().close();
+					} catch (IOException e) {
 					}
-				} catch (IOException e) {
-					synchronized (printLock) {
-						System.out.println(address + " threw IOException");
-					}
+					toTry.add(address);
 				}
-
 			}
 
 		}
+
 		List<Thread> pool = new ArrayList<Thread>();
 		for (int i = 1; i < 255; i++) {
 			pool.add(new ScannerThread("192.168.0." + i));
@@ -122,7 +102,63 @@ public class SocketMaker {
 				e.printStackTrace();
 			}
 		}
+
+		for (String address : toTry) {
+			Optional<Socket> socket = connectWithinTime(address, port, 5_000);
+			if (socket.isPresent()) {
+				try {
+					OutputStream out = socket.get().getOutputStream();
+					InputStream in = socket.get().getInputStream();
+					out.write(HANDSHAKE_CALL);
+					Optional<byte[]> response = readWithinTime(in, HANDSHAKE_RESPONSE.length, HANDSHAKE_PATIENCE);
+					if (response.isPresent() && Arrays.equals(response.get(), HANDSHAKE_RESPONSE)) {
+						out.write(IS_SCANNING);
+						socket.get().close();
+						System.out.println(address + " hosting");
+					}
+				} catch (IOException e) {
+				}
+			}
+		}
+		
 		System.out.println("scan complete");
+
+		/*
+		 * int port = scanner.nextInt();
+		 * System.out.println("scanning LAN on port " + port + "..."); Object
+		 * printLock = new Object();
+		 * 
+		 * class ScannerThread extends Thread {
+		 * 
+		 * String address;
+		 * 
+		 * ScannerThread(String address) { this.address = address; }
+		 * 
+		 * @Override public void run() { try { Optional<Socket> socket =
+		 * connectWithinTime(address, port, 10000); if (socket.isPresent()) {
+		 * OutputStream out = socket.get().getOutputStream(); //out = new
+		 * PrintingOutputStream(out); InputStream in =
+		 * socket.get().getInputStream(); //in = new PrintingInputStream(in);
+		 * out.write(HANDSHAKE_CALL); Optional<byte[]> response =
+		 * readWithinTime(in, HANDSHAKE_RESPONSE.length, HANDSHAKE_PATIENCE); if
+		 * (response.isPresent() && Arrays.equals(response.get(),
+		 * HANDSHAKE_RESPONSE)) { out.write(IS_SCANNING); socket.get().close();
+		 * synchronized (printLock) { System.out.println(address + " hosting");
+		 * } } else { synchronized (printLock) { System.out.println(address +
+		 * " failed handshake"); } } } else { synchronized (printLock) {
+		 * System.out.println(address + " wouldn't connect"); } } } catch
+		 * (IOException e) { synchronized (printLock) {
+		 * System.out.println(address + " threw IOException"); } }
+		 * 
+		 * }
+		 * 
+		 * } List<Thread> pool = new ArrayList<Thread>(); for (int i = 1; i <
+		 * 255; i++) { pool.add(new ScannerThread("192.168.0." + i));
+		 * pool.add(new ScannerThread("192.168.1." + i)); } for (Thread thread :
+		 * pool) { thread.start(); } for (Thread thread : pool) { try {
+		 * thread.join(); } catch (InterruptedException e) {
+		 * e.printStackTrace(); } } System.out.println("scan complete");
+		 */
 	}
 
 	/**
@@ -170,12 +206,15 @@ public class SocketMaker {
 				System.out.print("waiting... ");
 				Socket connection = ss.accept();
 				System.out.print("handshaking... ");
-				Optional<byte[]> initiation = readWithinTime(connection.getInputStream(), HANDSHAKE_CALL.length,
-						HANDSHAKE_PATIENCE);
+				OutputStream out = connection.getOutputStream();
+				// out = new PrintingOutputStream(out);
+				InputStream in = connection.getInputStream();
+				// in = new PrintingInputStream(in);
+				Optional<byte[]> initiation = readWithinTime(in, HANDSHAKE_CALL.length, HANDSHAKE_PATIENCE);
 				if (initiation.isPresent()) {
 					if (Arrays.equals(initiation.get(), HANDSHAKE_CALL)) {
-						connection.getOutputStream().write(HANDSHAKE_RESPONSE);
-						Optional<byte[]> scanning = readWithinTime(connection.getInputStream(), 1, HANDSHAKE_PATIENCE);
+						out.write(HANDSHAKE_RESPONSE);
+						Optional<byte[]> scanning = readWithinTime(in, 1, HANDSHAKE_PATIENCE);
 						if (scanning.isPresent()) {
 							if (scanning.get()[0] == IS_SCANNING) {
 								System.out.println("was only scanning.");
@@ -186,11 +225,11 @@ public class SocketMaker {
 								String choice = InputUtils.getOption(scanner, "accept", "reject");
 								if (choice.equalsIgnoreCase("accept")) {
 									ss.close();
-									connection.getOutputStream().write(ACCEPTED);
+									out.write(ACCEPTED);
 									System.out.println("accepted.");
 									return connection;
 								} else if (choice.equalsIgnoreCase("reject")) {
-									connection.getOutputStream().write(REJECTED);
+									out.write(REJECTED);
 									connection.close();
 									System.out.println("rejected.");
 								}
@@ -263,15 +302,16 @@ public class SocketMaker {
 		Socket socket = new Socket();
 		try {
 			Thread closer = new Thread() {
-				
+
 				@Override
 				public void run() {
 					try {
 						Thread.sleep(patience);
 						socket.close();
-					} catch (InterruptedException | IOException e) {}
+					} catch (InterruptedException | IOException e) {
+					}
 				}
-				
+
 			};
 			closer.start();
 			socket.connect(new InetSocketAddress(ip, port));
