@@ -31,6 +31,7 @@ public class FileTransfer {
 			} catch (Exception e) {
 				System.out.println();
 				System.out.println(e.getClass().getName() + ": " + e.getMessage());
+				e.printStackTrace();
 			}
 		}
 		sender.injectReceiver(receiver);

@@ -2,9 +2,13 @@ package com.phoenixkahlo.filetransfer;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Optional;
 import java.util.Scanner;
 
@@ -40,16 +44,91 @@ public class SocketMaker {
 	public static Socket connectSocket() throws Exception {
 		return connectSocket(new Scanner(System.in));
 	}
-	
+
 	private static Socket connectSocket(Scanner scanner) throws Exception {
-		System.out.println("join [ip] [port]/host [port]");
-		String choice = InputUtils.getOption(scanner, "join", "host");
+		System.out.println("join [ip] [port]/host [port]/scan [port]");
+		String choice = InputUtils.getOption(scanner, "join", "host", "scan");
 		Socket connection = null;
 		if (choice.equalsIgnoreCase("join"))
 			connection = join(scanner);
 		else if (choice.equalsIgnoreCase("host"))
 			connection = host(scanner);
+		else if (choice.equalsIgnoreCase("scan")) {
+			localScan(scanner);
+			connection = connectSocket(scanner);
+		}
 		return connection;
+	}
+
+	private static void localScan(Scanner scanner) {
+		int port = scanner.nextInt();
+		System.out.println("scanning LAN on port " + port + "...");
+		Object printLock = new Object();
+		
+		class ScannerThread extends Thread {
+			
+			String address;
+			
+			ScannerThread(String address) {
+				this.address = address;
+			}
+			
+			@Override
+			public void run() {
+				try {
+					if (InetAddress.getByName(address).isReachable(100)) {
+						Socket socket = new Socket(address, port);
+						OutputStream out = socket.getOutputStream();
+						InputStream in = socket.getInputStream();
+						out.write(HANDSHAKE_CALL);
+						Optional<byte[]> response = readWithinTime(in, HANDSHAKE_RESPONSE.length, HANDSHAKE_PATIENCE);
+						if (response.isPresent() && Arrays.equals(response.get(), HANDSHAKE_RESPONSE)) {
+							out.write(IS_SCANNING);
+							socket.close();
+							synchronized (printLock) {
+								System.out.println(address + " hosting");
+							}
+						} else {
+							/*
+							synchronized (printLock) {
+								System.out.println(address + " failed handshake");
+							}
+							*/
+						}
+					} else {
+						/*
+						synchronized (printLock) {
+							System.out.println(address + " unreachable");
+						}
+						*/
+					}
+				} catch (IOException e) {
+					/*
+					synchronized (printLock) {
+						System.out.println(address + " threw IOException");
+					}
+					*/
+				}
+				
+			}
+			
+		}
+		List<Thread> pool = new ArrayList<Thread>();
+		for (int i = 1; i < 255; i++) {
+			pool.add(new ScannerThread("192.168.0." + i));
+			pool.add(new ScannerThread("192.168.1." + i));
+		}
+		for (Thread thread : pool) {
+			thread.start();
+		}
+		for (Thread thread : pool) {
+			try {
+				thread.join();
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
+		System.out.println("scan complete");
 	}
 
 	/**
@@ -93,44 +172,48 @@ public class SocketMaker {
 		int port = scanner.nextInt();
 		ServerSocket ss = new ServerSocket(port);
 		while (true) {
-			System.out.print("waiting... ");
-			Socket connection = ss.accept();
-			System.out.print("handshaking... ");
-			Optional<byte[]> initiation = readWithinTime(connection.getInputStream(), HANDSHAKE_CALL.length,
-					HANDSHAKE_PATIENCE);
-			if (initiation.isPresent()) {
-				if (Arrays.equals(initiation.get(), HANDSHAKE_CALL)) {
-					connection.getOutputStream().write(HANDSHAKE_RESPONSE);
-					Optional<byte[]> scanning = readWithinTime(connection.getInputStream(), 1, HANDSHAKE_PATIENCE);
-					if (scanning.isPresent()) {
-						if (scanning.get()[0] == IS_SCANNING) {
-							System.out.println("was only scanning.");
-						} else if (scanning.get()[0] == IS_NOT_SCANNING) {
-							System.out.println();
-							System.out.println("joined by \"" + connection + "\".");
-							System.out.println("accept/reject");
-							String choice = InputUtils.getOption(scanner, "accept", "reject");
-							if (choice.equalsIgnoreCase("accept")) {
-								ss.close();
-								connection.getOutputStream().write(ACCEPTED);
-								System.out.println("accepted.");
-								return connection;
-							} else if (choice.equalsIgnoreCase("reject")) {
-								connection.getOutputStream().write(REJECTED);
-								connection.close();
-								System.out.println("rejected.");
+			try {
+				System.out.print("waiting... ");
+				Socket connection = ss.accept();
+				System.out.print("handshaking... ");
+				Optional<byte[]> initiation = readWithinTime(connection.getInputStream(), HANDSHAKE_CALL.length,
+						HANDSHAKE_PATIENCE);
+				if (initiation.isPresent()) {
+					if (Arrays.equals(initiation.get(), HANDSHAKE_CALL)) {
+						connection.getOutputStream().write(HANDSHAKE_RESPONSE);
+						Optional<byte[]> scanning = readWithinTime(connection.getInputStream(), 1, HANDSHAKE_PATIENCE);
+						if (scanning.isPresent()) {
+							if (scanning.get()[0] == IS_SCANNING) {
+								System.out.println("was only scanning.");
+							} else if (scanning.get()[0] == IS_NOT_SCANNING) {
+								System.out.println();
+								System.out.println("joined by \"" + connection + "\".");
+								System.out.println("accept/reject");
+								String choice = InputUtils.getOption(scanner, "accept", "reject");
+								if (choice.equalsIgnoreCase("accept")) {
+									ss.close();
+									connection.getOutputStream().write(ACCEPTED);
+									System.out.println("accepted.");
+									return connection;
+								} else if (choice.equalsIgnoreCase("reject")) {
+									connection.getOutputStream().write(REJECTED);
+									connection.close();
+									System.out.println("rejected.");
+								}
+							} else {
+								System.out.println("scanning boolean is invalid.");
 							}
 						} else {
-							System.out.println("scanning boolean is invalid.");
+							System.out.println("scanning boolean timed out.");
 						}
 					} else {
-						System.out.println("scanning boolean timed out.");
+						System.out.println("handshake failed.");
 					}
 				} else {
-					System.out.println("handshake failed.");
+					System.out.println("handshake timed out.");
 				}
-			} else {
-				System.out.println("handshake timed out.");
+			} catch (IOException e) {
+				System.out.println("IOException.");
 			}
 		}
 	}
