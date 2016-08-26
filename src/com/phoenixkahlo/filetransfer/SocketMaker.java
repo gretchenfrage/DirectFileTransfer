@@ -3,7 +3,7 @@ package com.phoenixkahlo.filetransfer;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
@@ -54,64 +54,58 @@ public class SocketMaker {
 		else if (choice.equalsIgnoreCase("host"))
 			connection = host(scanner);
 		else if (choice.equalsIgnoreCase("scan")) {
-			localScan(scanner);
+			scan(scanner);
 			connection = connectSocket(scanner);
 		}
 		return connection;
 	}
 
-	private static void localScan(Scanner scanner) {
+	private static void scan(Scanner scanner) {
 		int port = scanner.nextInt();
 		System.out.println("scanning LAN on port " + port + "...");
 		Object printLock = new Object();
-		
+
 		class ScannerThread extends Thread {
-			
+
 			String address;
-			
+
 			ScannerThread(String address) {
 				this.address = address;
 			}
-			
+
 			@Override
 			public void run() {
 				try {
-					if (InetAddress.getByName(address).isReachable(100)) {
-						Socket socket = new Socket(address, port);
-						OutputStream out = socket.getOutputStream();
-						InputStream in = socket.getInputStream();
+					Optional<Socket> socket = connectWithinTime(address, port, 1000);
+					if (socket.isPresent()) {
+						OutputStream out = socket.get().getOutputStream();
+						InputStream in = socket.get().getInputStream();
 						out.write(HANDSHAKE_CALL);
 						Optional<byte[]> response = readWithinTime(in, HANDSHAKE_RESPONSE.length, HANDSHAKE_PATIENCE);
 						if (response.isPresent() && Arrays.equals(response.get(), HANDSHAKE_RESPONSE)) {
 							out.write(IS_SCANNING);
-							socket.close();
+							socket.get().close();
 							synchronized (printLock) {
 								System.out.println(address + " hosting");
 							}
 						} else {
-							/*
 							synchronized (printLock) {
 								System.out.println(address + " failed handshake");
 							}
-							*/
 						}
 					} else {
-						/*
 						synchronized (printLock) {
-							System.out.println(address + " unreachable");
+							System.out.println(address + " wouldn't connect");
 						}
-						*/
 					}
 				} catch (IOException e) {
-					/*
 					synchronized (printLock) {
 						System.out.println(address + " threw IOException");
 					}
-					*/
 				}
-				
+
 			}
-			
+
 		}
 		List<Thread> pool = new ArrayList<Thread>();
 		for (int i = 1; i < 255; i++) {
@@ -260,6 +254,29 @@ public class SocketMaker {
 			in.read(buffer);
 			closer.interrupt();
 			return Optional.of(buffer);
+		} catch (IOException e) {
+			return Optional.empty();
+		}
+	}
+
+	private static Optional<Socket> connectWithinTime(String ip, int port, long patience) {
+		Socket socket = new Socket();
+		try {
+			Thread closer = new Thread() {
+				
+				@Override
+				public void run() {
+					try {
+						Thread.sleep(patience);
+						socket.close();
+					} catch (InterruptedException | IOException e) {}
+				}
+				
+			};
+			closer.start();
+			socket.connect(new InetSocketAddress(ip, port));
+			closer.interrupt();
+			return Optional.of(socket);
 		} catch (IOException e) {
 			return Optional.empty();
 		}
